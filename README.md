@@ -377,28 +377,17 @@ public class ArrayList<E> extends AbstractList<E>
     }
 
     /**
-     * Removes all of the elements from this list.  The list will
-     * be empty after this call returns.
+     * 清除所有的元素
      */
     public void clear() {
         modCount++;
-        final Object[] es = elementData;
-        for (int to = size, i = size = 0; i < to; i++)
+        final Object[] es = elementData;// 获取元素数组
+        for (int to = size, i = size = 0; i < to; i++)// 循环清除
             es[i] = null;
     }
 
     /**
-     * Appends all of the elements in the specified collection to the end of
-     * this list, in the order that they are returned by the
-     * specified collection's Iterator.  The behavior of this operation is
-     * undefined if the specified collection is modified while the operation
-     * is in progress.  (This implies that the behavior of this call is
-     * undefined if the specified collection is this list, and this
-     * list is nonempty.)
-     *
-     * @param c collection containing elements to be added to this list
-     * @return {@code true} if this list changed as a result of the call
-     * @throws NullPointerException if the specified collection is null
+     * 添加集合元素（容量不足会扩容）
      */
     public boolean addAll(Collection<? extends E> c) {
         Object[] a = c.toArray();
@@ -408,27 +397,15 @@ public class ArrayList<E> extends AbstractList<E>
             return false;
         Object[] elementData;
         final int s;
-        if (numNew > (elementData = this.elementData).length - (s = size))
-            elementData = grow(s + numNew);
-        System.arraycopy(a, 0, elementData, s, numNew);
-        size = s + numNew;
+        if (numNew > (elementData = this.elementData).length - (s = size))// 新元素大于剩余容量
+            elementData = grow(s + numNew);// 数组扩容
+        System.arraycopy(a, 0, elementData, s, numNew);// 添加数组复制到扩容后或者老数组
+        size = s + numNew;// 数组元素重置
         return true;
     }
 
     /**
-     * Inserts all of the elements in the specified collection into this
-     * list, starting at the specified position.  Shifts the element
-     * currently at that position (if any) and any subsequent elements to
-     * the right (increases their indices).  The new elements will appear
-     * in the list in the order that they are returned by the
-     * specified collection's iterator.
-     *
-     * @param index index at which to insert the first element from the
-     *              specified collection
-     * @param c collection containing elements to be added to this list
-     * @return {@code true} if this list changed as a result of the call
-     * @throws IndexOutOfBoundsException {@inheritDoc}
-     * @throws NullPointerException if the specified collection is null
+     * 在指定索引位置添加集合（涉及到扩容或元素后移操作）
      */
     public boolean addAll(int index, Collection<? extends E> c) {
         rangeCheckForAdd(index);
@@ -440,54 +417,397 @@ public class ArrayList<E> extends AbstractList<E>
             return false;
         Object[] elementData;
         final int s;
-        if (numNew > (elementData = this.elementData).length - (s = size))
-            elementData = grow(s + numNew);
+        if (numNew > (elementData = this.elementData).length - (s = size))// 容量不足
+            elementData = grow(s + numNew);// 扩容
 
-        int numMoved = s - index;
-        if (numMoved > 0)
+        int numMoved = s - index;// 后移个数
+        if (numMoved > 0)// 需要后移元素
             System.arraycopy(elementData, index,
                              elementData, index + numNew,
-                             numMoved);
-        System.arraycopy(a, 0, elementData, index, numNew);
-        size = s + numNew;
+                             numMoved);// 拷贝实现插入位置后的元素整体后移
+        System.arraycopy(a, 0, elementData, index, numNew);// 直接拷贝新元素
+        size = s + numNew;// 重置元素大小
+        return true;
+    }     
+}
+
+```
+
+
+
+#### **LinkedList**
+
+```java
+package java.util;
+
+import java.util.function.Consumer;
+
+public class LinkedList<E>
+        extends AbstractSequentialList<E>
+        implements List<E>, Deque<E>, Cloneable, java.io.Serializable
+{
+    transient int size = 0;
+
+    /**
+     * 指向第一个节点
+     */
+    transient Node<E> first;
+
+    /**
+     * 指向最后一个节点
+     */
+    transient Node<E> last;
+
+    /**
+     * 无参构造甘薯
+     */
+    public LinkedList() {
+    }
+
+    /**
+     * 有参构造函数，将集合中的元素添加到链表中
+     */
+    public LinkedList(Collection<? extends E> c) {
+        this();
+        addAll(c);
+    }
+
+    /**
+     * 将元素添加为链表的第一个元素
+     */
+    private void linkFirst(E e) {
+        final Node<E> f = first;// 第一个节点指向f
+        final Node<E> newNode = new Node<>(null, e, f);// 前置节点为空，后置节点为第一个节点
+        first = newNode;// 重置first节点为新添加的头节点
+        if (f == null)// 链表为空
+            last = newNode;// 链表为空时，最后一个节点也指向新添加的头节点
+        else
+            f.prev = newNode;// 第一个节点的前置节点指向新添加的头节点
+        size++;// 链表个数+1
+        modCount++;// 修改次数+1
+    }
+
+    /**
+     * 将元素添加为链表的最后一个元素
+     */
+    void linkLast(E e) {
+        final Node<E> l = last;// 最后节点指向l
+        final Node<E> newNode = new Node<>(l, e, null);// 最后节点的前置节点为l
+        last = newNode;// last指向最后的节点
+        if (l == null)// 如果链表为空
+            first = newNode;// 链表为空时，第一个节点也指向新添加的头节点
+        else
+            l.next = newNode;// 最后节点的后置节点指向新添加的头节点
+        size++;// 链表个数+1
+        modCount++;// 修改次数+1
+    }
+
+    /**
+     * 在非空节点之前添加节点
+     */
+    void linkBefore(E e, Node<E> succ) {
+        // assert succ != null;
+        final Node<E> pred = succ.prev;// 获取这个非空节点的前置节点
+        final Node<E> newNode = new Node<>(pred, e, succ);// 创建新节点
+        succ.prev = newNode;// 非空节点的前置节点为新元素
+        if (pred == null)// 如果前置节点为空，说明当前节点为第一个节点
+            first = newNode;// 链表为空时，第一个节点也指向新添加的头节点
+        else
+            pred.next = newNode;// 前置节点的后置节点指向新添加的头节点
+        size++;// 链表个数+1
+        modCount++;// 修改次数+1
+    }
+
+    /**
+     * 删除头节点
+     */
+    private E unlinkFirst(Node<E> f) {
+        // assert f == first && f != null;
+        final E element = f.item;// 暂存f节点的数据
+        final Node<E> next = f.next;// 获取f节点的下一个节点
+        f.item = null;
+        f.next = null; // help GC
+        first = next;// 下一个节点作为头节点
+        if (next == null)// 如果下一个节点为空，说明当前链表只有一个节点
+            last = null;// 如果下一个节点为空，说明当前链表只有一个节点，最后一个节点也指向null
+        else
+            next.prev = null;// 下一个节点的前置节点指向null
+        size--;// 链表个数-1
+        modCount++;// 修改次数+1
+        return element;
+    }
+
+    /**
+     * 删除尾节点
+     */
+    private E unlinkLast(Node<E> l) {
+        // assert l == last && l != null;
+        final E element = l.item;// 暂存尾节点数据
+        final Node<E> prev = l.prev;// 获取尾结点的前置节点
+        l.item = null;
+        l.prev = null; // help GC
+        last = prev;// 重置last为当前删除节点的前置节点
+        if (prev == null)// 如果前置节点为空，说明当前节点为最后一个节点
+            first = null;// 如果前置节点为空，说明当前节点为最后一个节点，链表为空
+        else
+            prev.next = null;// 前置节点的后置节点指向null
+        size--;// 链表个数-1
+        modCount++;// 修改次数+1
+        return element;
+    }
+
+    /**
+     * 删除某个非空节点
+     */
+    E unlink(Node<E> x) {
+        // assert x != null;
+        final E element = x.item;// 暂存当前节点的数据
+        final Node<E> next = x.next;// 获取当前节点的后置节点
+        final Node<E> prev = x.prev;// 获取当前节点的前置节点
+
+        if (prev == null) {// 如果前置节点为空，说明当前节点为第一个节点
+            first = next;// 下一个节点作为头节点
+        } else {
+            prev.next = next;// 当前节点的前置节点 的后置节点 指向当前节点的后置节点
+            x.prev = null;// 当前节点的前置节点指向null
+        }
+
+        if (next == null) {// 如果后置节点为空，说明当前节点为最后一个节点
+            last = prev;// 重置last为当前删除节点的前置节点
+        } else {
+            next.prev = prev;// 当前节点的后置节点 的前置节点 指向当前节点的前置节点
+            x.next = null;// 当前节点的后置节点指向null
+        }
+
+        x.item = null;
+        size--;// 链表个数-1
+        modCount++;// 修改次数+1
+        return element;
+    }
+
+    /**
+     * 获取头节点
+     */
+    public E getFirst() {
+        final Node<E> f = first;// 获取头节点
+        if (f == null)
+            throw new NoSuchElementException();
+        return f.item;
+    }
+
+    /**
+     * 获取尾节点
+     */
+    public E getLast() {
+        final Node<E> l = last;// 获取尾节点
+        if (l == null)
+            throw new NoSuchElementException();
+        return l.item;
+    }
+
+    /**
+     * 删除头节点
+     */
+    public E removeFirst() {
+        final Node<E> f = first;// 获取头节点
+        if (f == null)
+            throw new NoSuchElementException();
+        return unlinkFirst(f);// 删除头节点
+    }
+
+    /**
+     * 删除尾节点
+     */
+    public E removeLast() {
+        final Node<E> l = last;// 获取尾节点
+        if (l == null)
+            throw new NoSuchElementException();
+        return unlinkLast(l);// 删除尾节点
+    }
+
+    /**
+     * 在头节点前添加元素
+     */
+    public void addFirst(E e) {
+        linkFirst(e);
+    }
+
+    /**
+     * 在尾节点后添加元素
+     */
+    public void addLast(E e) {
+        linkLast(e);
+    }
+
+    /**
+     * 判断链表是否包含某个元素
+     */
+    public boolean contains(Object o) {
+        return indexOf(o) >= 0;
+    }
+
+    /**
+     * 返回链表大小
+     */
+    public int size() {
+        return size;
+    }
+
+    /**
+     * 添加元素到链表尾部
+     */
+    public boolean add(E e) {
+        linkLast(e);
         return true;
     }
 
     /**
-     * Removes from this list all of the elements whose index is between
-     * {@code fromIndex}, inclusive, and {@code toIndex}, exclusive.
-     * Shifts any succeeding elements to the left (reduces their index).
-     * This call shortens the list by {@code (toIndex - fromIndex)} elements.
-     * (If {@code toIndex==fromIndex}, this operation has no effect.)
-     *
-     * @throws IndexOutOfBoundsException if {@code fromIndex} or
-     *         {@code toIndex} is out of range
-     *         ({@code fromIndex < 0 ||
-     *          toIndex > size() ||
-     *          toIndex < fromIndex})
+     * 删除某个元素
      */
-    protected void removeRange(int fromIndex, int toIndex) {
-        if (fromIndex > toIndex) {
-            throw new IndexOutOfBoundsException(
-                    outOfBoundsMsg(fromIndex, toIndex));
+    public boolean remove(Object o) {
+        if (o == null) {
+            for (Node<E> x = first; x != null; x = x.next) {// 遍历链表
+                if (x.item == null) {// 如果当前节点的数据为空
+                    unlink(x);// 删除当前节点
+                    return true;
+                }
+            }
+        } else {
+            for (Node<E> x = first; x != null; x = x.next) {// 遍历链表
+                if (o.equals(x.item)) {// 如果当前节点的数据与指定元素相等
+                    unlink(x);// 删除当前节点
+                    return true;
+                }
+            }
         }
-        modCount++;
-        shiftTailOverGap(elementData, fromIndex, toIndex);
-    }
-
-    /** Erases the gap from lo to hi, by sliding down following elements. */
-    private void shiftTailOverGap(Object[] es, int lo, int hi) {
-        System.arraycopy(es, hi, es, lo, size - hi);
-        for (int to = size, i = (size -= hi - lo); i < to; i++)
-            es[i] = null;
+        return false;
     }
 
     /**
-     * A version of rangeCheck used by add and addAll.
+     * 添加集合元素到尾部
      */
-    private void rangeCheckForAdd(int index) {
-        if (index > size || index < 0)
-            throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
+    public boolean addAll(Collection<? extends E> c) {
+        return addAll(size, c);
+    }
+
+    /**
+     * 添加集合元素到链表指定位置
+     */
+    public boolean addAll(int index, Collection<? extends E> c) {
+        checkPositionIndex(index);// 检查索引是否越界
+
+        Object[] a = c.toArray();// 将集合转换为数组
+        int numNew = a.length;// 新集合的元素个数
+        if (numNew == 0)
+            return false;
+
+        Node<E> pred, succ;// pred: 前置节点, succ: 后置节点
+        if (index == size) {// 如果索引等于链表的大小，说明是在链表的末尾添加元素
+            succ = null;// 后继结点指向空
+            pred = last;// 前置节点指向最后一个节点
+        } else {
+            succ = node(index);// 获取索引位置的节点（原节点：被占用的节点）
+            pred = succ.prev;// 获取索引位置节点的前置节点（原节点：被占用的节点）
+        }
+
+        for (Object o : a) {
+            @SuppressWarnings("unchecked") E e = (E) o;
+            Node<E> newNode = new Node<>(pred, e, null);
+            if (pred == null)// 如果前置节点为空，说明是在链表的头部添加元素
+                first = newNode;// 头节点指向新节点
+            else
+                pred.next = newNode;// 前置节点的后继节点指向新节点
+            pred = newNode;// 前置节点指向新节点
+        }
+
+        if (succ == null) {// 如果之前原节点获取到后置节点为空，说明是在链表的末尾添加元素
+            last = pred;// 最后一个节点指向新节点
+        } else {
+            pred.next = succ;// 新节点指向被占用的节点
+            succ.prev = pred;// 被占用的节点的前置节点指向新节点
+        }
+
+        size += numNew;// 链表的大小增加新集合的元素个数
+        modCount++;// 修改次数增加
+        return true;
+    }
+
+    /**
+     * Removes all of the elements from this list.
+     * The list will be empty after this call returns.
+     */
+    public void clear() {
+        // Clearing all of the links between nodes is "unnecessary", but:
+        // - helps a generational GC if the discarded nodes inhabit
+        //   more than one generation
+        // - is sure to free memory even if there is a reachable Iterator
+        for (Node<E> x = first; x != null; ) {
+            Node<E> next = x.next;
+            x.item = null;
+            x.next = null;
+            x.prev = null;
+            x = next;
+        }
+        first = last = null;
+        size = 0;
+        modCount++;
+    }
+
+
+    // Positional Access Operations
+
+    /**
+     * 获取指定下标元素
+     */
+    public E get(int index) {
+        checkElementIndex(index);// 检查索引是否越界
+        return node(index).item;
+    }
+
+    /**
+     * 更新指定下标元素数据
+     */
+    public E set(int index, E element) {
+        checkElementIndex(index);// 检查索引是否越界
+        Node<E> x = node(index);// 获取索引位置的节点（原节点：被占）的节点用
+        E oldVal = x.item;// 获取索引位置节点的数据（原数据：被占）
+        x.item = element;// 更新索引位置节点的数据（新数据：占）
+        return oldVal;// 返回原数据（被占）
+    }
+
+    /**
+     * 按照指定下标添加元素
+     */
+    public void add(int index, E element) {
+        checkPositionIndex(index);// 检查索引是否越界
+
+        if (index == size)// 如果索引等于链表的大小，说明是在链表的末尾添加元素
+            linkLast(element);// 在链表的末尾添加元素
+        else
+            linkBefore(element, node(index));// 在索引位置的节点之前添加元素
+    }
+
+    /**
+     * 删除指定下标元素
+     */
+    public E remove(int index) {
+        checkElementIndex(index);// 检查索引是否越界
+        return unlink(node(index));// 删除索引位置的节点
+    }
+
+    /**
+     * Tells if the argument is the index of an existing element.
+     */
+    private boolean isElementIndex(int index) {
+        return index >= 0 && index < size;
+    }
+
+    /**
+     * Tells if the argument is the index of a valid position for an
+     * iterator or an add operation.
+     */
+    private boolean isPositionIndex(int index) {
+        return index >= 0 && index <= size;
     }
 
     /**
@@ -499,976 +819,237 @@ public class ArrayList<E> extends AbstractList<E>
         return "Index: "+index+", Size: "+size;
     }
 
-    /**
-     * A version used in checking (fromIndex > toIndex) condition
-     */
-    private static String outOfBoundsMsg(int fromIndex, int toIndex) {
-        return "From Index: " + fromIndex + " > To Index: " + toIndex;
+    private void checkElementIndex(int index) {
+        if (!isElementIndex(index))
+            throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
+    }
+
+    private void checkPositionIndex(int index) {
+        if (!isPositionIndex(index))
+            throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
     }
 
     /**
-     * Removes from this list all of its elements that are contained in the
-     * specified collection.
-     *
-     * @param c collection containing elements to be removed from this list
-     * @return {@code true} if this list changed as a result of the call
-     * @throws ClassCastException if the class of an element of this list
-     *         is incompatible with the specified collection
-     * (<a href="Collection.html#optional-restrictions">optional</a>)
-     * @throws NullPointerException if this list contains a null element and the
-     *         specified collection does not permit null elements
-     * (<a href="Collection.html#optional-restrictions">optional</a>),
-     *         or if the specified collection is null
-     * @see Collection#contains(Object)
+     * 返回指定元素索引处的（非空）节点
      */
-    public boolean removeAll(Collection<?> c) {
-        return batchRemove(c, false, 0, size);
-    }
+    Node<E> node(int index) {
+        // assert isElementIndex(index);
 
-    /**
-     * Retains only the elements in this list that are contained in the
-     * specified collection.  In other words, removes from this list all
-     * of its elements that are not contained in the specified collection.
-     *
-     * @param c collection containing elements to be retained in this list
-     * @return {@code true} if this list changed as a result of the call
-     * @throws ClassCastException if the class of an element of this list
-     *         is incompatible with the specified collection
-     * (<a href="Collection.html#optional-restrictions">optional</a>)
-     * @throws NullPointerException if this list contains a null element and the
-     *         specified collection does not permit null elements
-     * (<a href="Collection.html#optional-restrictions">optional</a>),
-     *         or if the specified collection is null
-     * @see Collection#contains(Object)
-     */
-    public boolean retainAll(Collection<?> c) {
-        return batchRemove(c, true, 0, size);
-    }
-
-    boolean batchRemove(Collection<?> c, boolean complement,
-                        final int from, final int end) {
-        Objects.requireNonNull(c);
-        final Object[] es = elementData;
-        int r;
-        // Optimize for initial run of survivors
-        for (r = from;; r++) {
-            if (r == end)
-                return false;
-            if (c.contains(es[r]) != complement)
-                break;
+        if (index < (size >> 1)) {
+            Node<E> x = first;
+            for (int i = 0; i < index; i++)
+                x = x.next;
+            return x;
+        } else {
+            Node<E> x = last;
+            for (int i = size - 1; i > index; i--)
+                x = x.prev;
+            return x;
         }
-        int w = r++;
-        try {
-            for (Object e; r < end; r++)
-                if (c.contains(e = es[r]) == complement)
-                    es[w++] = e;
-        } catch (Throwable ex) {
-            // Preserve behavioral compatibility with AbstractCollection,
-            // even if c.contains() throws.
-            System.arraycopy(es, r, es, w, end - r);
-            w += end - r;
-            throw ex;
-        } finally {
-            modCount += end - w;
-            shiftTailOverGap(es, w, end);
+    }
+
+    // Search Operations
+
+    /**
+     * 返回指定元素首次出现的索引；如果此列表不包含该元素，则返回 -1。
+     */
+    public int indexOf(Object o) {
+        int index = 0;
+        if (o == null) {// 如果元素为null
+            for (Node<E> x = first; x != null; x = x.next) {// 遍历链表
+                if (x.item == null)// 如果节点元素为null
+                    return index;// 如果节点元素为null，返回当前索引
+                index++;// 索引加1
+            }
+        } else {
+            for (Node<E> x = first; x != null; x = x.next) {// 遍历链表
+                if (o.equals(x.item))// 如果元素相等
+                    return index;// 返回当前索引
+                index++;// 索引加1
+            }
         }
+        return -1;
+    }
+
+    /**
+     * 返回指定元素最后一次出现的索引；如果此列表不包含该元素，则返回 -1。（从后往前遍历）
+     */
+    public int lastIndexOf(Object o) {
+        int index = size;
+        if (o == null) {// 如果元素为null
+            for (Node<E> x = last; x != null; x = x.prev) {// 从后往前遍历链表
+                index--;// 索引减1
+                if (x.item == null)// 如果节点元素为null
+                    return index;// 如果节点元素为null，返回当前索引
+            }
+        } else {
+            for (Node<E> x = last; x != null; x = x.prev) {// 从后往前遍历链表
+                index--;// 索引减1
+                if (o.equals(x.item))// 如果元素相等
+                    return index;// 返回当前索引
+            }
+        }
+        return -1;
+    }
+
+    // Queue operations.
+
+    /**
+     * 获取第一个节点元素
+     */
+    public E peek() {
+        final Node<E> f = first;
+        return (f == null) ? null : f.item;
+    }
+
+    /**
+     * 获取第一个元素
+     */
+    public E element() {
+        return getFirst();
+    }
+
+    /**
+     * 获取并移除第一个元素
+     */
+    public E poll() {
+        final Node<E> f = first;
+        return (f == null) ? null : unlinkFirst(f);
+    }
+
+    /**
+     * 删除第一个元素
+     */
+    public E remove() {
+        return removeFirst();
+    }
+
+    /**
+     * 将指定元素添加到链表尾部
+     */
+    public boolean offer(E e) {
+        return add(e);
+    }
+
+    // Deque operations
+    /**
+     * 将指定元素添加到链表最前
+     */
+    public boolean offerFirst(E e) {
+        addFirst(e);
         return true;
     }
 
     /**
-     * Saves the state of the {@code ArrayList} instance to a stream
-     * (that is, serializes it).
-     *
-     * @param s the stream
-     * @throws java.io.IOException if an I/O error occurs
-     * @serialData The length of the array backing the {@code ArrayList}
-     *             instance is emitted (int), followed by all of its elements
-     *             (each an {@code Object}) in the proper order.
+     * 将指定元素添加到链表尾部
      */
-    @java.io.Serial
-    private void writeObject(java.io.ObjectOutputStream s)
-        throws java.io.IOException {
-        // Write out element count, and any hidden stuff
-        int expectedModCount = modCount;
-        s.defaultWriteObject();
-
-        // Write out size as capacity for behavioral compatibility with clone()
-        s.writeInt(size);
-
-        // Write out all elements in the proper order.
-        for (int i=0; i<size; i++) {
-            s.writeObject(elementData[i]);
-        }
-
-        if (modCount != expectedModCount) {
-            throw new ConcurrentModificationException();
-        }
+    public boolean offerLast(E e) {
+        addLast(e);
+        return true;
     }
 
     /**
-     * Reconstitutes the {@code ArrayList} instance from a stream (that is,
-     * deserializes it).
-     * @param s the stream
-     * @throws ClassNotFoundException if the class of a serialized object
-     *         could not be found
-     * @throws java.io.IOException if an I/O error occurs
+     * 获取第一个元素
      */
-    @java.io.Serial
-    private void readObject(java.io.ObjectInputStream s)
-        throws java.io.IOException, ClassNotFoundException {
+    public E peekFirst() {
+        final Node<E> f = first;
+        return (f == null) ? null : f.item;
+    }
 
-        // Read in size, and any hidden stuff
-        s.defaultReadObject();
+    /**
+     * 获取最后一个元素
+     */
+    public E peekLast() {
+        final Node<E> l = last;
+        return (l == null) ? null : l.item;
+    }
 
-        // Read in capacity
-        s.readInt(); // ignored
+    /**
+     * 获取并移除第一个元素
+     */
+    public E pollFirst() {
+        final Node<E> f = first;
+        return (f == null) ? null : unlinkFirst(f);
+    }
 
-        if (size > 0) {
-            // like clone(), allocate array based upon size not capacity
-            SharedSecrets.getJavaObjectInputStreamAccess().checkArray(s, Object[].class, size);
-            Object[] elements = new Object[size];
+    /**
+     * 获取并移除最后一个元素
+     */
+    public E pollLast() {
+        final Node<E> l = last;
+        return (l == null) ? null : unlinkLast(l);
+    }
 
-            // Read in all elements in the proper order.
-            for (int i = 0; i < size; i++) {
-                elements[i] = s.readObject();
+    /**
+     * 添加元素到列表头部
+     */
+    public void push(E e) {
+        addFirst(e);
+    }
+
+    /**
+     * 产出以第一元素并返回
+     */
+    public E pop() {
+        return removeFirst();
+    }
+
+    /**
+     * 从前向后便利删除第一个出现的元素
+     */
+    public boolean removeFirstOccurrence(Object o) {
+        return remove(o);
+    }
+
+    /**
+     * 从后向前便利删除第一个出现的元素
+     */
+    public boolean removeLastOccurrence(Object o) {
+        if (o == null) {
+            for (Node<E> x = last; x != null; x = x.prev) {
+                if (x.item == null) {
+                    unlink(x);
+                    return true;
+                }
             }
-
-            elementData = elements;
-        } else if (size == 0) {
-            elementData = EMPTY_ELEMENTDATA;
         } else {
-            throw new java.io.InvalidObjectException("Invalid size: " + size);
-        }
-    }
-
-    /**
-     * Returns a list iterator over the elements in this list (in proper
-     * sequence), starting at the specified position in the list.
-     * The specified index indicates the first element that would be
-     * returned by an initial call to {@link ListIterator#next next}.
-     * An initial call to {@link ListIterator#previous previous} would
-     * return the element with the specified index minus one.
-     *
-     * <p>The returned list iterator is <a href="#fail-fast"><i>fail-fast</i></a>.
-     *
-     * @throws IndexOutOfBoundsException {@inheritDoc}
-     */
-    public ListIterator<E> listIterator(int index) {
-        rangeCheckForAdd(index);
-        return new ListItr(index);
-    }
-
-    /**
-     * Returns a list iterator over the elements in this list (in proper
-     * sequence).
-     *
-     * <p>The returned list iterator is <a href="#fail-fast"><i>fail-fast</i></a>.
-     *
-     * @see #listIterator(int)
-     */
-    public ListIterator<E> listIterator() {
-        return new ListItr(0);
-    }
-
-    /**
-     * Returns an iterator over the elements in this list in proper sequence.
-     *
-     * <p>The returned iterator is <a href="#fail-fast"><i>fail-fast</i></a>.
-     *
-     * @return an iterator over the elements in this list in proper sequence
-     */
-    public Iterator<E> iterator() {
-        return new Itr();
-    }
-
-    /**
-     * An optimized version of AbstractList.Itr
-     */
-    private class Itr implements Iterator<E> {
-        int cursor;       // index of next element to return
-        int lastRet = -1; // index of last element returned; -1 if no such
-        int expectedModCount = modCount;
-
-        // prevent creating a synthetic constructor
-        Itr() {}
-
-        public boolean hasNext() {
-            return cursor != size;
-        }
-
-        @SuppressWarnings("unchecked")
-        public E next() {
-            checkForComodification();
-            int i = cursor;
-            if (i >= size)
-                throw new NoSuchElementException();
-            Object[] elementData = ArrayList.this.elementData;
-            if (i >= elementData.length)
-                throw new ConcurrentModificationException();
-            cursor = i + 1;
-            return (E) elementData[lastRet = i];
-        }
-
-        public void remove() {
-            if (lastRet < 0)
-                throw new IllegalStateException();
-            checkForComodification();
-
-            try {
-                ArrayList.this.remove(lastRet);
-                cursor = lastRet;
-                lastRet = -1;
-                expectedModCount = modCount;
-            } catch (IndexOutOfBoundsException ex) {
-                throw new ConcurrentModificationException();
-            }
-        }
-
-        @Override
-        public void forEachRemaining(Consumer<? super E> action) {
-            Objects.requireNonNull(action);
-            final int size = ArrayList.this.size;
-            int i = cursor;
-            if (i < size) {
-                final Object[] es = elementData;
-                if (i >= es.length)
-                    throw new ConcurrentModificationException();
-                for (; i < size && modCount == expectedModCount; i++)
-                    action.accept(elementAt(es, i));
-                // update once at end to reduce heap write traffic
-                cursor = i;
-                lastRet = i - 1;
-                checkForComodification();
-            }
-        }
-
-        final void checkForComodification() {
-            if (modCount != expectedModCount)
-                throw new ConcurrentModificationException();
-        }
-    }
-
-    /**
-     * An optimized version of AbstractList.ListItr
-     */
-    private class ListItr extends Itr implements ListIterator<E> {
-        ListItr(int index) {
-            super();
-            cursor = index;
-        }
-
-        public boolean hasPrevious() {
-            return cursor != 0;
-        }
-
-        public int nextIndex() {
-            return cursor;
-        }
-
-        public int previousIndex() {
-            return cursor - 1;
-        }
-
-        @SuppressWarnings("unchecked")
-        public E previous() {
-            checkForComodification();
-            int i = cursor - 1;
-            if (i < 0)
-                throw new NoSuchElementException();
-            Object[] elementData = ArrayList.this.elementData;
-            if (i >= elementData.length)
-                throw new ConcurrentModificationException();
-            cursor = i;
-            return (E) elementData[lastRet = i];
-        }
-
-        public void set(E e) {
-            if (lastRet < 0)
-                throw new IllegalStateException();
-            checkForComodification();
-
-            try {
-                ArrayList.this.set(lastRet, e);
-            } catch (IndexOutOfBoundsException ex) {
-                throw new ConcurrentModificationException();
-            }
-        }
-
-        public void add(E e) {
-            checkForComodification();
-
-            try {
-                int i = cursor;
-                ArrayList.this.add(i, e);
-                cursor = i + 1;
-                lastRet = -1;
-                expectedModCount = modCount;
-            } catch (IndexOutOfBoundsException ex) {
-                throw new ConcurrentModificationException();
-            }
-        }
-    }
-
-    /**
-     * Returns a view of the portion of this list between the specified
-     * {@code fromIndex}, inclusive, and {@code toIndex}, exclusive.  (If
-     * {@code fromIndex} and {@code toIndex} are equal, the returned list is
-     * empty.)  The returned list is backed by this list, so non-structural
-     * changes in the returned list are reflected in this list, and vice-versa.
-     * The returned list supports all of the optional list operations.
-     *
-     * <p>This method eliminates the need for explicit range operations (of
-     * the sort that commonly exist for arrays).  Any operation that expects
-     * a list can be used as a range operation by passing a subList view
-     * instead of a whole list.  For example, the following idiom
-     * removes a range of elements from a list:
-     * <pre>
-     *      list.subList(from, to).clear();
-     * </pre>
-     * Similar idioms may be constructed for {@link #indexOf(Object)} and
-     * {@link #lastIndexOf(Object)}, and all of the algorithms in the
-     * {@link Collections} class can be applied to a subList.
-     *
-     * <p>The semantics of the list returned by this method become undefined if
-     * the backing list (i.e., this list) is <i>structurally modified</i> in
-     * any way other than via the returned list.  (Structural modifications are
-     * those that change the size of this list, or otherwise perturb it in such
-     * a fashion that iterations in progress may yield incorrect results.)
-     *
-     * @throws IndexOutOfBoundsException {@inheritDoc}
-     * @throws IllegalArgumentException {@inheritDoc}
-     */
-    public List<E> subList(int fromIndex, int toIndex) {
-        subListRangeCheck(fromIndex, toIndex, size);
-        return new SubList<>(this, fromIndex, toIndex);
-    }
-
-    private static class SubList<E> extends AbstractList<E> implements RandomAccess {
-        private final ArrayList<E> root;
-        private final SubList<E> parent;
-        private final int offset;
-        private int size;
-
-        /**
-         * Constructs a sublist of an arbitrary ArrayList.
-         */
-        public SubList(ArrayList<E> root, int fromIndex, int toIndex) {
-            this.root = root;
-            this.parent = null;
-            this.offset = fromIndex;
-            this.size = toIndex - fromIndex;
-            this.modCount = root.modCount;
-        }
-
-        /**
-         * Constructs a sublist of another SubList.
-         */
-        private SubList(SubList<E> parent, int fromIndex, int toIndex) {
-            this.root = parent.root;
-            this.parent = parent;
-            this.offset = parent.offset + fromIndex;
-            this.size = toIndex - fromIndex;
-            this.modCount = parent.modCount;
-        }
-
-        public E set(int index, E element) {
-            Objects.checkIndex(index, size);
-            checkForComodification();
-            E oldValue = root.elementData(offset + index);
-            root.elementData[offset + index] = element;
-            return oldValue;
-        }
-
-        public E get(int index) {
-            Objects.checkIndex(index, size);
-            checkForComodification();
-            return root.elementData(offset + index);
-        }
-
-        public int size() {
-            checkForComodification();
-            return size;
-        }
-
-        public void add(int index, E element) {
-            rangeCheckForAdd(index);
-            checkForComodification();
-            root.add(offset + index, element);
-            updateSizeAndModCount(1);
-        }
-
-        public E remove(int index) {
-            Objects.checkIndex(index, size);
-            checkForComodification();
-            E result = root.remove(offset + index);
-            updateSizeAndModCount(-1);
-            return result;
-        }
-
-        protected void removeRange(int fromIndex, int toIndex) {
-            checkForComodification();
-            root.removeRange(offset + fromIndex, offset + toIndex);
-            updateSizeAndModCount(fromIndex - toIndex);
-        }
-
-        public boolean addAll(Collection<? extends E> c) {
-            return addAll(this.size, c);
-        }
-
-        public boolean addAll(int index, Collection<? extends E> c) {
-            rangeCheckForAdd(index);
-            int cSize = c.size();
-            if (cSize==0)
-                return false;
-            checkForComodification();
-            root.addAll(offset + index, c);
-            updateSizeAndModCount(cSize);
-            return true;
-        }
-
-        public void replaceAll(UnaryOperator<E> operator) {
-            root.replaceAllRange(operator, offset, offset + size);
-        }
-
-        public boolean removeAll(Collection<?> c) {
-            return batchRemove(c, false);
-        }
-
-        public boolean retainAll(Collection<?> c) {
-            return batchRemove(c, true);
-        }
-
-        private boolean batchRemove(Collection<?> c, boolean complement) {
-            checkForComodification();
-            int oldSize = root.size;
-            boolean modified =
-                root.batchRemove(c, complement, offset, offset + size);
-            if (modified)
-                updateSizeAndModCount(root.size - oldSize);
-            return modified;
-        }
-
-        public boolean removeIf(Predicate<? super E> filter) {
-            checkForComodification();
-            int oldSize = root.size;
-            boolean modified = root.removeIf(filter, offset, offset + size);
-            if (modified)
-                updateSizeAndModCount(root.size - oldSize);
-            return modified;
-        }
-
-        public Object[] toArray() {
-            checkForComodification();
-            return Arrays.copyOfRange(root.elementData, offset, offset + size);
-        }
-
-        @SuppressWarnings("unchecked")
-        public <T> T[] toArray(T[] a) {
-            checkForComodification();
-            if (a.length < size)
-                return (T[]) Arrays.copyOfRange(
-                        root.elementData, offset, offset + size, a.getClass());
-            System.arraycopy(root.elementData, offset, a, 0, size);
-            if (a.length > size)
-                a[size] = null;
-            return a;
-        }
-
-        public boolean equals(Object o) {
-            if (o == this) {
-                return true;
-            }
-
-            if (!(o instanceof List)) {
-                return false;
-            }
-
-            boolean equal = root.equalsRange((List<?>)o, offset, offset + size);
-            checkForComodification();
-            return equal;
-        }
-
-        public int hashCode() {
-            int hash = root.hashCodeRange(offset, offset + size);
-            checkForComodification();
-            return hash;
-        }
-
-        public int indexOf(Object o) {
-            int index = root.indexOfRange(o, offset, offset + size);
-            checkForComodification();
-            return index >= 0 ? index - offset : -1;
-        }
-
-        public int lastIndexOf(Object o) {
-            int index = root.lastIndexOfRange(o, offset, offset + size);
-            checkForComodification();
-            return index >= 0 ? index - offset : -1;
-        }
-
-        public boolean contains(Object o) {
-            return indexOf(o) >= 0;
-        }
-
-        public Iterator<E> iterator() {
-            return listIterator();
-        }
-
-        public ListIterator<E> listIterator(int index) {
-            checkForComodification();
-            rangeCheckForAdd(index);
-
-            return new ListIterator<E>() {
-                int cursor = index;
-                int lastRet = -1;
-                int expectedModCount = SubList.this.modCount;
-
-                public boolean hasNext() {
-                    return cursor != SubList.this.size;
-                }
-
-                @SuppressWarnings("unchecked")
-                public E next() {
-                    checkForComodification();
-                    int i = cursor;
-                    if (i >= SubList.this.size)
-                        throw new NoSuchElementException();
-                    Object[] elementData = root.elementData;
-                    if (offset + i >= elementData.length)
-                        throw new ConcurrentModificationException();
-                    cursor = i + 1;
-                    return (E) elementData[offset + (lastRet = i)];
-                }
-
-                public boolean hasPrevious() {
-                    return cursor != 0;
-                }
-
-                @SuppressWarnings("unchecked")
-                public E previous() {
-                    checkForComodification();
-                    int i = cursor - 1;
-                    if (i < 0)
-                        throw new NoSuchElementException();
-                    Object[] elementData = root.elementData;
-                    if (offset + i >= elementData.length)
-                        throw new ConcurrentModificationException();
-                    cursor = i;
-                    return (E) elementData[offset + (lastRet = i)];
-                }
-
-                public void forEachRemaining(Consumer<? super E> action) {
-                    Objects.requireNonNull(action);
-                    final int size = SubList.this.size;
-                    int i = cursor;
-                    if (i < size) {
-                        final Object[] es = root.elementData;
-                        if (offset + i >= es.length)
-                            throw new ConcurrentModificationException();
-                        for (; i < size && root.modCount == expectedModCount; i++)
-                            action.accept(elementAt(es, offset + i));
-                        // update once at end to reduce heap write traffic
-                        cursor = i;
-                        lastRet = i - 1;
-                        checkForComodification();
-                    }
-                }
-
-                public int nextIndex() {
-                    return cursor;
-                }
-
-                public int previousIndex() {
-                    return cursor - 1;
-                }
-
-                public void remove() {
-                    if (lastRet < 0)
-                        throw new IllegalStateException();
-                    checkForComodification();
-
-                    try {
-                        SubList.this.remove(lastRet);
-                        cursor = lastRet;
-                        lastRet = -1;
-                        expectedModCount = SubList.this.modCount;
-                    } catch (IndexOutOfBoundsException ex) {
-                        throw new ConcurrentModificationException();
-                    }
-                }
-
-                public void set(E e) {
-                    if (lastRet < 0)
-                        throw new IllegalStateException();
-                    checkForComodification();
-
-                    try {
-                        root.set(offset + lastRet, e);
-                    } catch (IndexOutOfBoundsException ex) {
-                        throw new ConcurrentModificationException();
-                    }
-                }
-
-                public void add(E e) {
-                    checkForComodification();
-
-                    try {
-                        int i = cursor;
-                        SubList.this.add(i, e);
-                        cursor = i + 1;
-                        lastRet = -1;
-                        expectedModCount = SubList.this.modCount;
-                    } catch (IndexOutOfBoundsException ex) {
-                        throw new ConcurrentModificationException();
-                    }
-                }
-
-                final void checkForComodification() {
-                    if (root.modCount != expectedModCount)
-                        throw new ConcurrentModificationException();
-                }
-            };
-        }
-
-        public List<E> subList(int fromIndex, int toIndex) {
-            subListRangeCheck(fromIndex, toIndex, size);
-            return new SubList<>(this, fromIndex, toIndex);
-        }
-
-        private void rangeCheckForAdd(int index) {
-            if (index < 0 || index > this.size)
-                throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
-        }
-
-        private String outOfBoundsMsg(int index) {
-            return "Index: "+index+", Size: "+this.size;
-        }
-
-        private void checkForComodification() {
-            if (root.modCount != modCount)
-                throw new ConcurrentModificationException();
-        }
-
-        private void updateSizeAndModCount(int sizeChange) {
-            SubList<E> slist = this;
-            do {
-                slist.size += sizeChange;
-                slist.modCount = root.modCount;
-                slist = slist.parent;
-            } while (slist != null);
-        }
-
-        public Spliterator<E> spliterator() {
-            checkForComodification();
-
-            // ArrayListSpliterator not used here due to late-binding
-            return new Spliterator<E>() {
-                private int index = offset; // current index, modified on advance/split
-                private int fence = -1; // -1 until used; then one past last index
-                private int expectedModCount; // initialized when fence set
-
-                private int getFence() { // initialize fence to size on first use
-                    int hi; // (a specialized variant appears in method forEach)
-                    if ((hi = fence) < 0) {
-                        expectedModCount = modCount;
-                        hi = fence = offset + size;
-                    }
-                    return hi;
-                }
-
-                public ArrayList<E>.ArrayListSpliterator trySplit() {
-                    int hi = getFence(), lo = index, mid = (lo + hi) >>> 1;
-                    // ArrayListSpliterator can be used here as the source is already bound
-                    return (lo >= mid) ? null : // divide range in half unless too small
-                        root.new ArrayListSpliterator(lo, index = mid, expectedModCount);
-                }
-
-                public boolean tryAdvance(Consumer<? super E> action) {
-                    Objects.requireNonNull(action);
-                    int hi = getFence(), i = index;
-                    if (i < hi) {
-                        index = i + 1;
-                        @SuppressWarnings("unchecked") E e = (E)root.elementData[i];
-                        action.accept(e);
-                        if (root.modCount != expectedModCount)
-                            throw new ConcurrentModificationException();
-                        return true;
-                    }
-                    return false;
-                }
-
-                public void forEachRemaining(Consumer<? super E> action) {
-                    Objects.requireNonNull(action);
-                    int i, hi, mc; // hoist accesses and checks from loop
-                    ArrayList<E> lst = root;
-                    Object[] a;
-                    if ((a = lst.elementData) != null) {
-                        if ((hi = fence) < 0) {
-                            mc = modCount;
-                            hi = offset + size;
-                        }
-                        else
-                            mc = expectedModCount;
-                        if ((i = index) >= 0 && (index = hi) <= a.length) {
-                            for (; i < hi; ++i) {
-                                @SuppressWarnings("unchecked") E e = (E) a[i];
-                                action.accept(e);
-                            }
-                            if (lst.modCount == mc)
-                                return;
-                        }
-                    }
-                    throw new ConcurrentModificationException();
-                }
-
-                public long estimateSize() {
-                    return getFence() - index;
-                }
-
-                public int characteristics() {
-                    return Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED;
-                }
-            };
-        }
-    }
-
-    /**
-     * @throws NullPointerException {@inheritDoc}
-     */
-    @Override
-    public void forEach(Consumer<? super E> action) {
-        Objects.requireNonNull(action);
-        final int expectedModCount = modCount;
-        final Object[] es = elementData;
-        final int size = this.size;
-        for (int i = 0; modCount == expectedModCount && i < size; i++)
-            action.accept(elementAt(es, i));
-        if (modCount != expectedModCount)
-            throw new ConcurrentModificationException();
-    }
-
-    /**
-     * Creates a <em><a href="Spliterator.html#binding">late-binding</a></em>
-     * and <em>fail-fast</em> {@link Spliterator} over the elements in this
-     * list.
-     *
-     * <p>The {@code Spliterator} reports {@link Spliterator#SIZED},
-     * {@link Spliterator#SUBSIZED}, and {@link Spliterator#ORDERED}.
-     * Overriding implementations should document the reporting of additional
-     * characteristic values.
-     *
-     * @return a {@code Spliterator} over the elements in this list
-     * @since 1.8
-     */
-    @Override
-    public Spliterator<E> spliterator() {
-        return new ArrayListSpliterator(0, -1, 0);
-    }
-
-    /** Index-based split-by-two, lazily initialized Spliterator */
-    final class ArrayListSpliterator implements Spliterator<E> {
-
-        /*
-         * If ArrayLists were immutable, or structurally immutable (no
-         * adds, removes, etc), we could implement their spliterators
-         * with Arrays.spliterator. Instead we detect as much
-         * interference during traversal as practical without
-         * sacrificing much performance. We rely primarily on
-         * modCounts. These are not guaranteed to detect concurrency
-         * violations, and are sometimes overly conservative about
-         * within-thread interference, but detect enough problems to
-         * be worthwhile in practice. To carry this out, we (1) lazily
-         * initialize fence and expectedModCount until the latest
-         * point that we need to commit to the state we are checking
-         * against; thus improving precision.  (This doesn't apply to
-         * SubLists, that create spliterators with current non-lazy
-         * values).  (2) We perform only a single
-         * ConcurrentModificationException check at the end of forEach
-         * (the most performance-sensitive method). When using forEach
-         * (as opposed to iterators), we can normally only detect
-         * interference after actions, not before. Further
-         * CME-triggering checks apply to all other possible
-         * violations of assumptions for example null or too-small
-         * elementData array given its size(), that could only have
-         * occurred due to interference.  This allows the inner loop
-         * of forEach to run without any further checks, and
-         * simplifies lambda-resolution. While this does entail a
-         * number of checks, note that in the common case of
-         * list.stream().forEach(a), no checks or other computation
-         * occur anywhere other than inside forEach itself.  The other
-         * less-often-used methods cannot take advantage of most of
-         * these streamlinings.
-         */
-
-        private int index; // current index, modified on advance/split
-        private int fence; // -1 until used; then one past last index
-        private int expectedModCount; // initialized when fence set
-
-        /** Creates new spliterator covering the given range. */
-        ArrayListSpliterator(int origin, int fence, int expectedModCount) {
-            this.index = origin;
-            this.fence = fence;
-            this.expectedModCount = expectedModCount;
-        }
-
-        private int getFence() { // initialize fence to size on first use
-            int hi; // (a specialized variant appears in method forEach)
-            if ((hi = fence) < 0) {
-                expectedModCount = modCount;
-                hi = fence = size;
-            }
-            return hi;
-        }
-
-        public ArrayListSpliterator trySplit() {
-            int hi = getFence(), lo = index, mid = (lo + hi) >>> 1;
-            return (lo >= mid) ? null : // divide range in half unless too small
-                new ArrayListSpliterator(lo, index = mid, expectedModCount);
-        }
-
-        public boolean tryAdvance(Consumer<? super E> action) {
-            if (action == null)
-                throw new NullPointerException();
-            int hi = getFence(), i = index;
-            if (i < hi) {
-                index = i + 1;
-                @SuppressWarnings("unchecked") E e = (E)elementData[i];
-                action.accept(e);
-                if (modCount != expectedModCount)
-                    throw new ConcurrentModificationException();
-                return true;
-            }
-            return false;
-        }
-
-        public void forEachRemaining(Consumer<? super E> action) {
-            int i, hi, mc; // hoist accesses and checks from loop
-            Object[] a;
-            if (action == null)
-                throw new NullPointerException();
-            if ((a = elementData) != null) {
-                if ((hi = fence) < 0) {
-                    mc = modCount;
-                    hi = size;
-                }
-                else
-                    mc = expectedModCount;
-                if ((i = index) >= 0 && (index = hi) <= a.length) {
-                    for (; i < hi; ++i) {
-                        @SuppressWarnings("unchecked") E e = (E) a[i];
-                        action.accept(e);
-                    }
-                    if (modCount == mc)
-                        return;
+            for (Node<E> x = last; x != null; x = x.prev) {
+                if (o.equals(x.item)) {
+                    unlink(x);
+                    return true;
                 }
             }
-            throw new ConcurrentModificationException();
         }
-
-        public long estimateSize() {
-            return getFence() - index;
-        }
-
-        public int characteristics() {
-            return Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED;
-        }
+        return false;
     }
 
-    // A tiny bit set implementation
 
-    private static long[] nBits(int n) {
-        return new long[((n - 1) >> 6) + 1];
-    }
-    private static void setBit(long[] bits, int i) {
-        bits[i >> 6] |= 1L << i;
-    }
-    private static boolean isClear(long[] bits, int i) {
-        return (bits[i >> 6] & (1L << i)) == 0;
+    private static class Node<E> {
+        E item;
+        Node<E> next;
+        Node<E> prev;
+
+        Node(Node<E> prev, E element, Node<E> next) {
+            this.item = element;
+            this.next = next;
+            this.prev = prev;
+        }
     }
 
     /**
-     * @throws NullPointerException {@inheritDoc}
+     * 转为数组
      */
-    @Override
-    public boolean removeIf(Predicate<? super E> filter) {
-        return removeIf(filter, 0, size);
+    public Object[] toArray() {
+        Object[] result = new Object[size];
+        int i = 0;
+        for (Node<E> x = first; x != null; x = x.next)
+            result[i++] = x.item;
+        return result;
     }
 
-    /**
-     * Removes all elements satisfying the given predicate, from index
-     * i (inclusive) to index end (exclusive).
-     */
-    boolean removeIf(Predicate<? super E> filter, int i, final int end) {
-        Objects.requireNonNull(filter);
-        int expectedModCount = modCount;
-        final Object[] es = elementData;
-        // Optimize for initial run of survivors
-        for (; i < end && !filter.test(elementAt(es, i)); i++)
-            ;
-        // Tolerate predicates that reentrantly access the collection for
-        // read (but writers still get CME), so traverse once to find
-        // elements to delete, a second pass to physically expunge.
-        if (i < end) {
-            final int beg = i;
-            final long[] deathRow = nBits(end - beg);
-            deathRow[0] = 1L;   // set bit 0
-            for (i = beg + 1; i < end; i++)
-                if (filter.test(elementAt(es, i)))
-                    setBit(deathRow, i - beg);
-            if (modCount != expectedModCount)
-                throw new ConcurrentModificationException();
-            modCount++;
-            int w = beg;
-            for (i = beg; i < end; i++)
-                if (isClear(deathRow, i - beg))
-                    es[w++] = es[i];
-            shiftTailOverGap(es, w, end);
-            return true;
-        } else {
-            if (modCount != expectedModCount)
-                throw new ConcurrentModificationException();
-            return false;
-        }
-    }
-
-    @Override
-    public void replaceAll(UnaryOperator<E> operator) {
-        replaceAllRange(operator, 0, size);
-        // TODO(8203662): remove increment of modCount from ...
-        modCount++;
-    }
-
-    private void replaceAllRange(UnaryOperator<E> operator, int i, int end) {
-        Objects.requireNonNull(operator);
-        final int expectedModCount = modCount;
-        final Object[] es = elementData;
-        for (; modCount == expectedModCount && i < end; i++)
-            es[i] = operator.apply(elementAt(es, i));
-        if (modCount != expectedModCount)
-            throw new ConcurrentModificationException();
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public void sort(Comparator<? super E> c) {
-        final int expectedModCount = modCount;
-        Arrays.sort((E[]) elementData, 0, size, c);
-        if (modCount != expectedModCount)
-            throw new ConcurrentModificationException();
-        modCount++;
-    }
-
-    void checkInvariants() {
-        // assert size >= 0;
-        // assert size == elementData.length || elementData[size] == null;
-    }
 }
 
 ```
-
-
-
-#### **LinkedList**
 
 
 
