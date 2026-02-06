@@ -437,6 +437,8 @@ public class ArrayList<E> extends AbstractList<E>
 
 #### **LinkedList**
 
+![](pngs\linkedlist.png)
+
 ```java
 package java.util;
 
@@ -1051,12 +1053,509 @@ public class LinkedList<E>
 
 ```
 
-
-
 #### **Vector**
-- 2.1.4.1 线程安全实现
-- 2.1.4.2 遗留问题
-- 2.1.4.3 Stack类
+
+![](pngs\vector.png)
+
+```java
+package java.util;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.StreamCorruptedException;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
+
+import jdk.internal.util.ArraysSupport;
+
+public class Vector<E>
+        extends AbstractList<E>
+        implements List<E>, RandomAccess, Cloneable, java.io.Serializable
+{
+    /**
+     * 元素存储数组
+     */
+    @SuppressWarnings("serial") // Conditionally serializable
+    protected Object[] elementData;
+
+    /**
+     * 实际存储元素数量
+     */
+    protected int elementCount;
+
+    /**
+     * 容量增量 小于等于0时，则需要增长时容量会翻倍
+     */
+    protected int capacityIncrement;
+
+
+    /**
+     * 初始容量和容量增量构造器
+     */
+    public Vector(int initialCapacity, int capacityIncrement) {
+        super();
+        if (initialCapacity < 0)
+            throw new IllegalArgumentException("Illegal Capacity: "+
+                    initialCapacity);
+        this.elementData = new Object[initialCapacity];
+        this.capacityIncrement = capacityIncrement;
+    }
+
+    /**
+     * 初始容量和容量增量为0构造器
+     */
+    public Vector(int initialCapacity) {
+        this(initialCapacity, 0);
+    }
+
+    /**
+     * 初始容量和容量增量为0构造器
+     */
+    public Vector() {
+        this(10);
+    }
+
+    /**
+     * 初始化元素构造器
+     */
+    public Vector(Collection<? extends E> c) {
+        Object[] a = c.toArray();
+        elementCount = a.length;// 元素属性个数为入参集合大小
+        if (c.getClass() == ArrayList.class) {// 如果是Arraylist
+            elementData = a;// 直接指向Arraylist中的数组
+        } else {
+            elementData = Arrays.copyOf(a, elementCount, Object[].class);// 拷贝一份
+        }
+    }
+
+    /**
+     * 赋值当前Vector数组到目标数组（会覆盖目标数组）
+     */
+    public synchronized void copyInto(Object[] anArray) {
+        System.arraycopy(elementData, 0, anArray, 0, elementCount);
+    }
+
+    /**
+     * 缩容
+     */
+    public synchronized void trimToSize() {
+        modCount++;
+        int oldCapacity = elementData.length;// 当前容量大小
+        if (elementCount < oldCapacity) {// 如果元素个数小于当前容量大小
+            elementData = Arrays.copyOf(elementData, elementCount);// 拷贝一个新数组容量大小为元素个数
+        }
+    }
+
+    /**
+     * 扩容
+     */
+    public synchronized void ensureCapacity(int minCapacity) {
+        if (minCapacity > 0) {
+            modCount++;
+            if (minCapacity > elementData.length)// 期望容量大于当前容量大小
+                grow(minCapacity);// 扩容
+        }
+    }
+
+    /**
+     * 具体扩容算法
+     */
+    private Object[] grow(int minCapacity) {
+        int oldCapacity = elementData.length;// 旧容量
+        // 如果增量小于等于0则增量翻倍，否则newCapacity = oldCapacity + capacityIncrement
+        int newCapacity = ArraysSupport.newLength(oldCapacity,
+                minCapacity - oldCapacity, /* minimum growth */
+                capacityIncrement > 0 ? capacityIncrement : oldCapacity
+                /* preferred growth */);
+        return elementData = Arrays.copyOf(elementData, newCapacity);// 复制到新数组并且指定容量且重新指向
+    }
+
+    private Object[] grow() {
+        return grow(elementCount + 1);
+    }
+
+    /**
+     * 设置Vector的大小（元素个数）。如果新大小大于当前大小，会添加 null 元素；如果新大小小于当前大小，会丢弃多余元素
+     */
+    public synchronized void setSize(int newSize) {
+        modCount++;
+        if (newSize > elementData.length)// 入参大于当前容量
+            grow(newSize);//扩容操作
+        final Object[] es = elementData;
+        for (int to = elementCount, i = newSize; i < to; i++)// 丢弃元素
+            es[i] = null;
+        elementCount = newSize;// 重置元素大小
+    }
+
+    /**
+     * 获取容量
+     */
+    public synchronized int capacity() {
+        return elementData.length;
+    }
+
+    /**
+     * 获取元素个数
+     */
+    public synchronized int size() {
+        return elementCount;
+    }
+
+    /**
+     * 判断是否为空
+     */
+    public synchronized boolean isEmpty() {
+        return elementCount == 0;
+    }
+
+    /**
+     * 判断是否包含某个元素
+     */
+    public boolean contains(Object o) {
+        return indexOf(o, 0) >= 0;
+    }
+
+    /**
+     * 返回数组中首次出现的索引
+     */
+    public int indexOf(Object o) {
+        return indexOf(o, 0);
+    }
+
+    /**
+     * 返回从指定位置开始首次出现的目标元素索引
+     */
+    public synchronized int indexOf(Object o, int index) {
+        if (o == null) {// 查找空元素
+            for (int i = index ; i < elementCount ; i++)
+                if (elementData[i]==null)// 如果当前元素为空
+                    return i;// 返回索引
+        } else {
+            for (int i = index ; i < elementCount ; i++)
+                if (o.equals(elementData[i]))// 如果当前元素等于目标元素
+                    return i;// 返回索引
+        }
+        return -1;
+    }
+
+    /**
+     * 从后向前遍历，返回第一次出现的目标元素索引
+     */
+    public synchronized int lastIndexOf(Object o) {
+        return lastIndexOf(o, elementCount-1);
+    }
+
+    /**
+     * 从指定索引由后向前遍历，返回第一次出现的目标元素索引
+     */
+    public synchronized int lastIndexOf(Object o, int index) {
+        if (index >= elementCount)
+            throw new IndexOutOfBoundsException(index + " >= "+ elementCount);
+
+        if (o == null) {
+            for (int i = index; i >= 0; i--)
+                if (elementData[i]==null)
+                    return i;
+        } else {
+            for (int i = index; i >= 0; i--)
+                if (o.equals(elementData[i]))
+                    return i;
+        }
+        return -1;
+    }
+
+    /**
+     * 根据索引获取目标元素
+     */
+    public synchronized E elementAt(int index) {
+        if (index >= elementCount) {
+            throw new ArrayIndexOutOfBoundsException(index + " >= " + elementCount);
+        }
+
+        return elementData(index);// 直接从数组中获取目标元素
+    }
+
+    /**
+     * 获取第一个元素
+     */
+    public synchronized E firstElement() {
+        if (elementCount == 0) {
+            throw new NoSuchElementException();
+        }
+        return elementData(0);
+    }
+
+    /**
+     * 获取最后一个元素
+     */
+    public synchronized E lastElement() {
+        if (elementCount == 0) {
+            throw new NoSuchElementException();
+        }
+        return elementData(elementCount - 1);
+    }
+
+    /**
+     * 设置指定索引的目标元素
+     */
+    public synchronized void setElementAt(E obj, int index) {
+        if (index >= elementCount) {
+            throw new ArrayIndexOutOfBoundsException(index + " >= " +
+                    elementCount);
+        }
+        elementData[index] = obj;
+    }
+
+    /**
+     * 删除目标索引的元素
+     */
+    public synchronized void removeElementAt(int index) {
+        if (index >= elementCount) {
+            throw new ArrayIndexOutOfBoundsException(index + " >= " +
+                    elementCount);
+        }
+        else if (index < 0) {
+            throw new ArrayIndexOutOfBoundsException(index);
+        }
+        int j = elementCount - index - 1;// 计算需要移动的元素数量
+        if (j > 0) {// 如果被删除元素后面还有元素
+            System.arraycopy(elementData, index + 1, elementData, index, j);// 把删除的元素后边的元素拷贝到删除元素位置，前移操作
+        }
+        modCount++;// 修改计数器增加（用于迭代器快速失败）
+        elementCount--;// 元素数量减少
+        elementData[elementCount] = null; /* to let gc do its work */
+    }
+
+    /**
+     * 指定索引位置插入元素
+     */
+    public synchronized void insertElementAt(E obj, int index) {
+        if (index > elementCount) {// 必须向已存在位置插入元素
+            throw new ArrayIndexOutOfBoundsException(index
+                    + " > " + elementCount);
+        }
+        modCount++;
+        final int s = elementCount;// 获取现有元素数量
+        Object[] elementData = this.elementData;// 获取现有元素数组
+        if (s == elementData.length)// 如果现有容量满了
+            elementData = grow();// 扩容操作，扩容增量小于等于0时2倍扩容，否则当前容量加增量扩容
+        System.arraycopy(elementData, index,// 从index位置开始复制数组
+                elementData, index + 1,// 复制到index+1的位置
+                s - index);// 复制的个数
+        elementData[index] = obj;// 插入的元素赋值
+        elementCount = s + 1;// 元素个数+1
+    }
+
+    /**
+     * 添加元素
+     */
+    public synchronized void addElement(E obj) {
+        modCount++;
+        add(obj, elementData, elementCount);// 添加到末尾
+    }
+
+    /**
+     * 移除数组中首次出现的目标元素
+     */
+    public synchronized boolean removeElement(Object obj) {
+        modCount++;
+        int i = indexOf(obj);// 获取首次出现的目标元素索引（从前向后）
+        if (i >= 0) {
+            removeElementAt(i);// 移除元素并完成前移操作
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 移除所有元素
+     */
+    public synchronized void removeAllElements() {
+        final Object[] es = elementData;
+        for (int to = elementCount, i = elementCount = 0; i < to; i++)// 循环移除
+            es[i] = null;
+        modCount++;
+    }
+
+    /**
+     * Returns a clone of this vector. The copy will contain a
+     * reference to a clone of the internal data array, not a reference
+     * to the original internal data array of this {@code Vector} object.
+     *
+     * @return  a clone of this vector
+     */
+    public synchronized Object clone() {
+        try {
+            @SuppressWarnings("unchecked")
+            Vector<E> v = (Vector<E>) super.clone();
+            v.elementData = Arrays.copyOf(elementData, elementCount);
+            v.modCount = 0;
+            return v;
+        } catch (CloneNotSupportedException e) {
+            // this shouldn't happen, since we are Cloneable
+            throw new InternalError(e);
+        }
+    }
+
+    /**
+     * Returns an array containing all of the elements in this Vector
+     * in the correct order.
+     *
+     * @since 1.2
+     */
+    public synchronized Object[] toArray() {
+        return Arrays.copyOf(elementData, elementCount);
+    }
+
+    /**
+     * Returns an array containing all of the elements in this Vector in the
+     * correct order; the runtime type of the returned array is that of the
+     * specified array.  If the Vector fits in the specified array, it is
+     * returned therein.  Otherwise, a new array is allocated with the runtime
+     * type of the specified array and the size of this Vector.
+     *
+     * <p>If the Vector fits in the specified array with room to spare
+     * (i.e., the array has more elements than the Vector),
+     * the element in the array immediately following the end of the
+     * Vector is set to null.  (This is useful in determining the length
+     * of the Vector <em>only</em> if the caller knows that the Vector
+     * does not contain any null elements.)
+     *
+     * @param <T> type of array elements. The same type as {@code <E>} or a
+     * supertype of {@code <E>}.
+     * @param a the array into which the elements of the Vector are to
+     *          be stored, if it is big enough; otherwise, a new array of the
+     *          same runtime type is allocated for this purpose.
+     * @return an array containing the elements of the Vector
+     * @throws ArrayStoreException if the runtime type of a, {@code <T>}, is not
+     * a supertype of the runtime type, {@code <E>}, of every element in this
+     * Vector
+     * @throws NullPointerException if the given array is null
+     * @since 1.2
+     */
+    @SuppressWarnings("unchecked")
+    public synchronized <T> T[] toArray(T[] a) {
+        if (a.length < elementCount)
+            return (T[]) Arrays.copyOf(elementData, elementCount, a.getClass());
+
+        System.arraycopy(elementData, 0, a, 0, elementCount);
+
+        if (a.length > elementCount)
+            a[elementCount] = null;
+
+        return a;
+    }
+
+    // Positional Access Operations
+
+    @SuppressWarnings("unchecked")
+    E elementData(int index) {
+        return (E) elementData[index];
+    }
+
+    @SuppressWarnings("unchecked")
+    static <E> E elementAt(Object[] es, int index) {
+        return (E) es[index];
+    }
+
+    /**
+     * 根据指定索引获取目标元素
+     */
+    public synchronized E get(int index) {
+        if (index >= elementCount)
+            throw new ArrayIndexOutOfBoundsException(index);
+
+        return elementData(index);
+    }
+
+    /**
+     * 设置目标索引位置元素
+     */
+    public synchronized E set(int index, E element) {
+        if (index >= elementCount)
+            throw new ArrayIndexOutOfBoundsException(index);
+
+        E oldValue = elementData(index);// 获取旧值
+        elementData[index] = element;// 更新元素
+        return oldValue;// 返回旧值
+    }
+
+    /**
+     * 添加元素
+     */
+    private void add(E e, Object[] elementData, int s) {
+        if (s == elementData.length)// 容量满了
+            elementData = grow();// 扩容操作
+        elementData[s] = e;// 最后的位置赋值
+        elementCount = s + 1;// 现有元素个数+1
+    }
+
+    /**
+     * 添加元素到数组尾部
+     */
+    public synchronized boolean add(E e) {
+        modCount++;
+        add(e, elementData, elementCount);
+        return true;
+    }
+
+    /**
+     * 删除元素
+     */
+    public boolean remove(Object o) {
+        return removeElement(o);
+    }
+
+    /**
+     * 添加元素到索引指定位置并完成后移操作
+     */
+    public void add(int index, E element) {
+        insertElementAt(element, index);
+    }
+
+    /**
+     * 删除指定索引位置的元素并可能会涉及元素前移操作
+     */
+    public synchronized E remove(int index) {
+        modCount++;
+        if (index >= elementCount)
+            throw new ArrayIndexOutOfBoundsException(index);
+        E oldValue = elementData(index);
+
+        int numMoved = elementCount - index - 1;// 用于判断是否是尾部元素
+        if (numMoved > 0)// 不是尾部元素
+            System.arraycopy(elementData, index+1, elementData, index,
+                    numMoved);// 后面的所有元素前移（这里与arraylist的代码基本一致）
+        elementData[--elementCount] = null; // Let gc do its work
+
+        return oldValue;// 返回旧值
+    }
+
+    /**
+     * 添加元素集合
+     */
+    public boolean addAll(Collection<? extends E> c) {
+        Object[] a = c.toArray();
+        modCount++;
+        int numNew = a.length;// 新元素集合大小
+        if (numNew == 0)
+            return false;
+        synchronized (this) {
+            Object[] elementData = this.elementData;
+            final int s = elementCount;
+            if (numNew > elementData.length - s)// 目标集合元素大于现有容量给
+                elementData = grow(s + numNew);// 执行扩容操作
+            System.arraycopy(a, 0, elementData, s, numNew);// 新集合拷贝到旧集合中
+            elementCount = s + numNew;// 重置元素个数
+            return true;
+        }
+    }
+}
+
+```
+
+
 
 #### **CopyOnWriteArrayList**
 - 2.1.5.1 写时复制机制
