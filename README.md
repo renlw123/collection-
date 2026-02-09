@@ -1555,12 +1555,654 @@ public class Vector<E>
 
 ```
 
-
-
 #### **CopyOnWriteArrayList**
-- 2.1.5.1 写时复制机制
-- 2.1.5.2 并发安全性
-- 2.1.5.3 适用场景
+
+![](pngs\copyonwritearraylist.png)
+
+```java
+package java.util.concurrent;
+
+import java.lang.invoke.VarHandle;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.ConcurrentModificationException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.RandomAccess;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
+import jdk.internal.access.SharedSecrets;
+
+
+public class CopyOnWriteArrayList<E>
+        implements List<E>, RandomAccess, Cloneable, java.io.Serializable {
+    private static final long serialVersionUID = 8673264195747942595L;
+
+    /**
+     * 对象锁
+     */
+    final transient Object lock = new Object();
+
+    /** 存储元素数组，私有属性 */
+    private transient volatile Object[] array;
+
+    /**
+     * 获取数组
+     */
+    final Object[] getArray() {
+        return array;
+    }
+
+    /**
+     * 设置数组
+     */
+    final void setArray(Object[] a) {
+        array = a;
+    }
+
+    /**
+     * 无参构造函数，初始化一个空数组
+     */
+    public CopyOnWriteArrayList() {
+        setArray(new Object[0]);
+    }
+
+    /**
+     * 有参构造函数，初始化入参集合到数组中
+     */
+    public CopyOnWriteArrayList(Collection<? extends E> c) {
+        Object[] es;
+        if (c.getClass() == CopyOnWriteArrayList.class)
+            es = ((CopyOnWriteArrayList<?>)c).getArray();// 如果入参是CopyOnWriteArrayList集合，es直接指向集合的数组属性
+        else {
+            es = c.toArray();// 指向c集合数组
+            if (c.getClass() != java.util.ArrayList.class)// 如果c不是ArrayList
+                es = Arrays.copyOf(es, es.length, Object[].class);// 重新拷贝入参集合到新的数组中并重置es
+        }
+        setArray(es);// 给予array赋值操作
+    }
+
+    /**
+     * 有参构造函数，初始化入参数组到数组中
+     */
+    public CopyOnWriteArrayList(E[] toCopyIn) {
+        setArray(Arrays.copyOf(toCopyIn, toCopyIn.length, Object[].class));// 拷贝出一个新的数组并赋值
+    }
+
+    /**
+     * 获取数组大小
+     */
+    public int size() {
+        return getArray().length;
+    }
+
+    /**
+     * 获取数组是否为空
+     */
+    public boolean isEmpty() {
+        return size() == 0;
+    }
+
+    /**
+     * 获取指定元素范围内的目标元素索引（从前向后遍历）
+     */
+    private static int indexOfRange(Object o, Object[] es, int from, int to) {
+        if (o == null) {// 目标元素为空
+            for (int i = from; i < to; i++)// 从前向后遍历
+                if (es[i] == null)// 如果元素为空
+                    return i;// 返回索引
+        } else {
+            for (int i = from; i < to; i++)// 从前向后遍历
+                if (o.equals(es[i]))// 如果元素等于目标元素
+                    return i;// 返回索引
+        }
+        return -1;
+    }
+
+    /**
+     * 获取指定元素范围内的目标元素索引（从后向前遍历）
+     */
+    private static int lastIndexOfRange(Object o, Object[] es, int from, int to) {
+        if (o == null) {// 目标元素为空
+            for (int i = to - 1; i >= from; i--)// 从后向前遍历
+                if (es[i] == null)// 如果等于空
+                    return i;// 返回索引
+        } else {
+            for (int i = to - 1; i >= from; i--)// 从后向前遍历
+                if (o.equals(es[i]))// 如果等于目标元素
+                    return i;// 返回索引
+        }
+        return -1;
+    }
+
+    /**
+     * 从前向后遍历判断是否包含目标元素
+     */
+    public boolean contains(Object o) {
+        return indexOf(o) >= 0;
+    }
+
+    /**
+     * 获取目标元素索引
+     */
+    public int indexOf(Object o) {// 目标对象
+        Object[] es = getArray();// 获取当前数组
+        return indexOfRange(o, es, 0, es.length);// 从头到尾获取目标元素索引
+    }
+
+    /**
+     * 根据目标元素以及入参索引获取目标元素索引位置
+     */
+    public int indexOf(E e, int index) {
+        Object[] es = getArray();// 获取数组
+        return indexOfRange(e, es, index, es.length);// 从前向后获取目标索引
+    }
+
+    /**
+     * 从后向前获取目标索引
+     */
+    public int lastIndexOf(Object o) {
+        Object[] es = getArray();// 获取数组
+        return lastIndexOfRange(o, es, 0, es.length);// 从后向前获取目标索引
+    }
+
+    /**
+     * 从后向前根据入参索引获取目标索引元素位置
+     */
+    public int lastIndexOf(E e, int index) {
+        Object[] es = getArray();// 获取数组
+        return lastIndexOfRange(e, es, 0, index + 1);// 从后向前获取目标索引
+    }
+
+    /**
+     * 浅克隆，引用的对象还都是原对象
+     * 提问，既然是浅拷贝，克隆出来的新集合修改会影响原本的集合吗？或者原本的集合修改会影响新的集合吗？
+     * 答案是不会的，原数组会复制一份新的给自己用，克隆的列表仍然引用旧数组，从此分道扬镳，各自独立，这也是写时复制的命脉
+     */
+    public Object clone() {
+        try {
+            @SuppressWarnings("unchecked")
+            CopyOnWriteArrayList<E> clone =
+                    (CopyOnWriteArrayList<E>) super.clone();
+            clone.resetLock();// 确保得到的 CopyOnWriteArrayList 实例都有自己独立的锁对象
+            // Unlike in readObject, here we cannot visibility-piggyback on the
+            // volatile write in setArray().
+            VarHandle.releaseFence();
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            // this shouldn't happen, since we are Cloneable
+            throw new InternalError();
+        }
+    }
+
+    /**
+     * 转数组
+     */
+    public Object[] toArray() {
+        return getArray().clone();
+    }
+
+    /**
+     * 把当前集合中的元素复制到传入数组中，如果传入数组有值，则会覆盖
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T[] toArray(T[] a) {
+        Object[] es = getArray();
+        int len = es.length;
+        if (a.length < len)
+            return (T[]) Arrays.copyOf(es, len, a.getClass());
+        else {
+            System.arraycopy(es, 0, a, 0, len);
+            if (a.length > len)
+                a[len] = null;
+            return a;
+        }
+    }
+
+    // Positional Access Operations
+
+    @SuppressWarnings("unchecked")
+    static <E> E elementAt(Object[] a, int index) {
+        return (E) a[index];
+    }
+
+    static String outOfBounds(int index, int size) {
+        return "Index: " + index + ", Size: " + size;
+    }
+
+    /**
+     * 获取指定索引下标元素
+     */
+    public E get(int index) {
+        return elementAt(getArray(), index);
+    }
+
+    /**
+     * 更新指定索引元素
+     */
+    public E set(int index, E element) {
+        synchronized (lock) {
+            Object[] es = getArray();// 获取临时数组
+            E oldValue = elementAt(es, index);// 获取指定索引元素
+
+            if (oldValue != element) {// 比较引用地址
+                es = es.clone();// 创建数组副本（写时复制）
+                es[index] = element;// 更新指定索引元素
+            }
+            // Ensure volatile write semantics even when oldvalue == element
+            setArray(es);// 重新赋值，这保证了volatile写语义，确保修改对其他线程立即可见
+            return oldValue;// 返回旧值
+        }
+    }
+
+    /**
+     * 添加元素
+     */
+    public boolean add(E e) {
+        synchronized (lock) {
+            Object[] es = getArray();// 获取临时数组
+            int len = es.length;// 获取临时数组大小
+            es = Arrays.copyOf(es, len + 1);// 拷贝一份+1的数组并赋值给es
+            es[len] = e;// 尾部赋值
+            setArray(es);// 重新赋值，这保证了volatile写语义，确保修改对其他线程立即可见
+            return true;
+        }
+    }
+
+    /**
+     * 指定索引位置添加元素
+     */
+    public void add(int index, E element) {
+        synchronized (lock) {
+            Object[] es = getArray();// 获取临时数组
+            int len = es.length;// 获取临时数组长度
+            if (index > len || index < 0)// 如果插入的位置不在当前数组有效范围内
+                throw new IndexOutOfBoundsException(outOfBounds(index, len));// 抛出数组越界异常
+            Object[] newElements;// 新元素数组
+            int numMoved = len - index;// 数组长度减去指定索引下标，获取需要移动元素数量
+            if (numMoved == 0)// 如果等于零，说明在数组尾部插入，不需要移动
+                newElements = Arrays.copyOf(es, len + 1);// 创建容量+1的新数组
+            else {
+                newElements = new Object[len + 1];// 构建新数组大小在原有基础上+1
+                System.arraycopy(es, 0, newElements, 0, index);// 复制插入位置前的元素（0 ~ index-1）
+                System.arraycopy(es, index, newElements, index + 1,
+                        numMoved);// 将这些元素向后移动一位（从index+1位置开始存放）
+            }
+            newElements[index] = element;// 指定索引元素重新赋值
+            setArray(newElements);// 重新赋值，这保证了volatile写语义，确保修改对其他线程立即可见
+        }
+    }
+
+    /**
+     * 删除指定索引位置的元素
+     */
+    public E remove(int index) {
+        synchronized (lock) {
+            Object[] es = getArray();// 获取临时数组
+            int len = es.length;// 获取临时数组大小
+            E oldValue = elementAt(es, index);// 获取指定索引的旧值
+            int numMoved = len - index - 1;// 需要移动的个数
+            Object[] newElements;// 新数组
+            if (numMoved == 0)// 要删除的是最后一个元素
+                newElements = Arrays.copyOf(es, len - 1); // 创建新数组，只包含前 len-1 个元素
+            else {
+                newElements = new Object[len - 1];// 定义新数组大小在原基础上-1
+                System.arraycopy(es, 0, newElements, 0, index);// 拷贝删除位置前的元素
+                System.arraycopy(es, index + 1, newElements, index,
+                        numMoved);// 拷贝删除位置后的元素（整体前移一个单位）
+            }
+            setArray(newElements);// 重新赋值，这保证了volatile写语义，确保修改对其他线程立即可见
+            return oldValue;
+        }
+    }
+
+    /**
+     * 指定元素删除
+     */
+    public boolean remove(Object o) {
+        Object[] snapshot = getArray();// 获取临时数组
+        int index = indexOfRange(o, snapshot, 0, snapshot.length);// 获取临时数组删除目标索引
+        return index >= 0 && remove(o, snapshot, index);// 执行删除操作
+    }
+
+    /**
+     * 根据索引删除指定元素
+     */
+    private boolean remove(Object o, Object[] snapshot, int index) {
+        synchronized (lock) {
+            Object[] current = getArray();// 获取临时数组
+            int len = current.length;// 获取临时数组大小
+            if (snapshot != current) findIndex: {// 如果快照已过期（数组已被其他线程修改）
+                int prefix = Math.min(index, len);// 先比较数组前缀，看元素是否前移了
+                for (int i = 0; i < prefix; i++) {
+                    if (current[i] != snapshot[i]// 位置有变化
+                            && Objects.equals(o, current[i])) {// 且找到目标元素
+                        index = i;// 入参索引重置
+                        break findIndex;// 跳出标签块
+                    }
+                }
+                if (index >= len)// 如果没在前缀找到，检查原索引位置
+                    return false;// 索引越界
+                if (current[index] == o)// 原位置就是目标元素
+                    break findIndex;// 跳出标签块
+                index = indexOfRange(o, current, index, len);// 在原索引位置后面查找
+                if (index < 0)
+                    return false;// 没找到
+            }
+            Object[] newElements = new Object[len - 1];// 定义新数组大小为原数组大小-1
+            System.arraycopy(current, 0, newElements, 0, index);// 拷贝删除之前的元素
+            System.arraycopy(current, index + 1,
+                    newElements, index,
+                    len - index - 1);// 拷贝删除之后的元素，整齐前移一个单位
+            setArray(newElements);// 重新赋值，这保证了volatile写语义，确保修改对其他线程立即可见
+            return true;
+        }
+    }
+
+    /**
+     * 删除指定范围的元素
+     */
+    void removeRange(int fromIndex, int toIndex) {
+        synchronized (lock) {
+            Object[] es = getArray();// 获取临时数组
+            int len = es.length;// 获取临时数组长度
+
+            if (fromIndex < 0 || toIndex > len || toIndex < fromIndex)
+                throw new IndexOutOfBoundsException();// 合法性校验
+            int newlen = len - (toIndex - fromIndex);// 剩余数组大小
+            int numMoved = len - toIndex;// 数组移动单位个数
+            if (numMoved == 0)// 不需要移动
+                setArray(Arrays.copyOf(es, newlen));// 直接拷贝0-newlen个单位的元素并重新赋值
+            else {
+                Object[] newElements = new Object[newlen];// 定义newlen新数组
+                System.arraycopy(es, 0, newElements, 0, fromIndex);// 复制前半部分：从0到fromIndex（不包含fromIndex）
+                System.arraycopy(es, toIndex, newElements,
+                        fromIndex, numMoved);// 复制后半部分：从toIndex到结尾，放到新数组的fromIndex位置
+                setArray(newElements);// 重新赋值
+            }
+        }
+    }
+
+    /**
+     * 如果元素不存在当前数组中则添加目标元素
+     */
+    public boolean addIfAbsent(E e) {
+        Object[] snapshot = getArray();// 获取临时数组
+        return indexOfRange(e, snapshot, 0, snapshot.length) < 0// true-不存在
+                && addIfAbsent(e, snapshot);// 不存在则添加元素
+    }
+
+    /**
+     * 集合中不存在目标数据则添加
+     */
+    private boolean addIfAbsent(E e, Object[] snapshot) {
+        synchronized (lock) {
+            Object[] current = getArray();// 获取临时数组
+            int len = current.length;// 获取临时数组长度
+            if (snapshot != current) {// 如果快照数组不等于当前数组
+                // Optimize for lost race to another addXXX operation
+                int common = Math.min(snapshot.length, len);// 快照已过期，需要检查差异
+                for (int i = 0; i < common; i++)
+                    if (current[i] != snapshot[i]// 引用不同（说明被修改过）
+                            && Objects.equals(e, current[i]))// 且正好是我们想添加的元素
+                        return false;// 元素已存在
+                if (indexOfRange(e, current, common, len) >= 0)// 检查新增的部分（len可能比snapshot.length大）
+                    return false;
+            }
+            Object[] newElements = Arrays.copyOf(current, len + 1);// 通过拷贝创建新数组，大小+1
+            newElements[len] = e;// 数组尾部添加元素
+            setArray(newElements);// 数组重新赋值
+            return true;
+        }
+    }
+
+    /**
+     * 判断是否包含目标集合
+     */
+    public boolean containsAll(Collection<?> c) {
+        Object[] es = getArray();// 获取临时数组
+        int len = es.length;// 获取临时数组容量
+        for (Object e : c) {
+            if (indexOfRange(e, es, 0, len) < 0)// 不包含
+                return false;
+        }
+        return true;// 包含
+    }
+
+    /**
+     * 删除数组中指定集合中的元素
+     */
+    public boolean removeAll(Collection<?> c) {
+        Objects.requireNonNull(c);// 如果入参为空，抛空指针异常
+        return bulkRemove(e -> c.contains(e));// 判断目标集合是否包含
+    }
+
+    /**
+     * 从 该列表中移除所有不包含在指定集合中的元素
+     */
+    public boolean retainAll(Collection<?> c) {
+        Objects.requireNonNull(c);
+        return bulkRemove(e -> !c.contains(e));// 如果不包含则删除
+    }
+
+    /**
+     * 将指定集合中尚未包含在该列表中的元素，按该集合的迭代器返回的顺序，附加到列表末尾
+     */
+    public int addAllAbsent(Collection<? extends E> c) {
+        Object[] cs = c.toArray();// 获取临时数组
+        if (c.getClass() != ArrayList.class) {
+            cs = cs.clone();// 如果不是ArrayList直接重新赋值
+        }
+        if (cs.length == 0)// 如果集合为空，直接返回
+            return 0;
+        synchronized (lock) {
+            Object[] es = getArray();// 获取当前数组副本
+            int len = es.length;// 获取副本容量
+            int added = 0;
+            // uniquify and compact elements in cs
+            for (int i = 0; i < cs.length; ++i) {
+                Object e = cs[i];
+                if (indexOfRange(e, es, 0, len) < 0 &&// 当前列表中不存在e
+                        indexOfRange(e, cs, 0, added) < 0)// 避免添加重复元素
+                    cs[added++] = e;// 将不重复的元素压缩到cs数组中
+            }
+            if (added > 0) {
+                Object[] newElements = Arrays.copyOf(es, len + added);// 创建新数组以及初始化大小为原数组大小+新添加元素数量
+                System.arraycopy(cs, 0, newElements, len, added);// 拷贝到新数组
+                setArray(newElements);// 重新赋值
+            }
+            return added;// 返回添加数量
+        }
+    }
+
+    /**
+     * 清空数组
+     */
+    public void clear() {
+        synchronized (lock) {
+            setArray(new Object[0]);
+        }
+    }
+
+    /**
+     * 添加集合到当前数组尾部
+     * @see #add(Object)
+     */
+    public boolean addAll(Collection<? extends E> c) {
+        Object[] cs = (c.getClass() == CopyOnWriteArrayList.class) ?
+                ((CopyOnWriteArrayList<?>)c).getArray() : c.toArray();// 获取添加集合数组
+        if (cs.length == 0)// 如果大小为0直接返回
+            return false;
+        synchronized (lock) {
+            Object[] es = getArray();// 获取当前数组
+            int len = es.length;// 获取当前数组容量
+            Object[] newElements;
+            if (len == 0 && (c.getClass() == CopyOnWriteArrayList.class ||
+                    c.getClass() == ArrayList.class)) {// 如果当前数组大小为0并且类型为CopyOnWriteArrayList或者ArrayList
+                newElements = cs;// 新数组直接指向老数组
+            } else {
+                newElements = Arrays.copyOf(es, len + cs.length);// 否则拷贝老数组以及初始化容量为老数组大小+新数组大小
+                System.arraycopy(cs, 0, newElements, len, cs.length);// 然后再把新数组中的数据拷贝到新数组尾部（此时新数组已经包含的老数据）
+            }
+            setArray(newElements);// 重新赋值
+            return true;
+        }
+    }
+
+    /**
+     * 在指定索引位置添加新集合
+     */
+    public boolean addAll(int index, Collection<? extends E> c) {
+        Object[] cs = c.toArray();// 获取集合数组
+        synchronized (lock) {
+            Object[] es = getArray();// 获取当前数组
+            int len = es.length;// 获取当前数组大小
+            if (index > len || index < 0)
+                throw new IndexOutOfBoundsException(outOfBounds(index, len));// 索引合法性校验
+            if (cs.length == 0)
+                return false;
+            int numMoved = len - index;// 获取需要后移的个数
+            Object[] newElements;
+            if (numMoved == 0)// 添加到尾部
+                newElements = Arrays.copyOf(es, len + cs.length);// 拷贝老数组到新数组以及初始化新数组容量为老数组大小+新数组大小
+            else {
+                newElements = new Object[len + cs.length];// 初始化新数组以及容量为老数组大小+新数组大小
+                System.arraycopy(es, 0, newElements, 0, index);// 拷贝0-index个长度到新数组中
+                System.arraycopy(es, index,
+                        newElements, index + cs.length,
+                        numMoved);// 拷贝index+cs.length-尾部个单位额到新数组中
+                // 此处代码可以理解为把老数组拆分为两份，中间预留出来要插入的数组部分
+            }
+            System.arraycopy(cs, 0, newElements, index, cs.length);// 此时老数组已经在newElements中了，把新数组拷贝到指定索引位置
+            setArray(newElements);// 重新赋值
+            return true;
+        }
+    }
+
+    /**
+     * @throws NullPointerException {@inheritDoc}
+     */
+    public void forEach(Consumer<? super E> action) {
+        Objects.requireNonNull(action);
+        for (Object x : getArray()) {
+            @SuppressWarnings("unchecked") E e = (E) x;
+            action.accept(e);
+        }
+    }
+
+    /**
+     * 满足条件则删除
+     */
+    public boolean removeIf(Predicate<? super E> filter) {
+        Objects.requireNonNull(filter);
+        return bulkRemove(filter);
+    }
+
+    // A tiny bit set implementation
+
+    private static long[] nBits(int n) {
+        return new long[((n - 1) >> 6) + 1];
+    }
+    private static void setBit(long[] bits, int i) {
+        bits[i >> 6] |= 1L << i;
+    }
+    private static boolean isClear(long[] bits, int i) {
+        return (bits[i >> 6] & (1L << i)) == 0;
+    }
+
+    private boolean bulkRemove(Predicate<? super E> filter) {
+        synchronized (lock) {
+            return bulkRemove(filter, 0, getArray().length);// 遍历去删除
+        }
+    }
+
+    boolean bulkRemove(Predicate<? super E> filter, int i, int end) {
+        // assert Thread.holdsLock(lock);
+        final Object[] es = getArray(); // 获取当前数组的快照
+        // Optimize for initial run of survivors
+        // 第一轮：跳过前面不需要删除的元素
+        // 找到第一个需要删除的元素位置
+        for (; i < end && !filter.test(elementAt(es, i)); i++)
+            ;
+        if (i < end) {// 如果找到了需要删除的元素
+            final int beg = i;// 记录第一个删除位置
+            final long[] deathRow = nBits(end - beg);// 创建位图记录哪些元素要删除
+            int deleted = 1;// 已删除计数（第一个元素要删除）
+            deathRow[0] = 1L;// 设置位图第一个位（标记 beg 位置的元素要删除）
+            // 第二轮：扫描剩余元素，标记所有需要删除的元素
+            for (i = beg + 1; i < end; i++)
+                if (filter.test(elementAt(es, i))) {// 调用 Lambda 判断
+                    setBit(deathRow, i - beg);// 在位图中标记
+                    deleted++;// 增加删除计数
+                }
+            // 检查数组是否被并发修改（CopyOnWriteArrayList 的特性）
+            if (es != getArray())
+                throw new ConcurrentModificationException();
+            // 创建新数组（长度 = 原长度 - 删除数量）
+            final Object[] newElts = Arrays.copyOf(es, es.length - deleted);
+            int w = beg;// 新数组的写入位置
+            for (i = beg; i < end; i++)
+                if (isClear(deathRow, i - beg))// 如果位图显示该元素不需要删除
+                    newElts[w++] = es[i];// 拷贝到新数组
+            // 拷贝 [end, 原长度) 区间的元素（这些在扫描范围之外）
+            System.arraycopy(es, i, newElts, w, es.length - i);
+            // 设置新数组，完成写时复制
+            setArray(newElts);
+            return true;// 返回 true 表示有修改
+        } else {
+            if (es != getArray())
+                throw new ConcurrentModificationException();
+            return false; // 返回 false 表示没有修改
+        }
+    }
+
+    /**
+     * 函数式接口替换所有元素例如
+     * scores.replaceAll(score -> score < 60 ? 60 : score);
+     */
+    public void replaceAll(UnaryOperator<E> operator) {
+        synchronized (lock) {
+            replaceAllRange(operator, 0, getArray().length);// 替换从0-length的元素
+        }
+    }
+
+    void replaceAllRange(UnaryOperator<E> operator, int i, int end) {
+        // assert Thread.holdsLock(lock);
+        Objects.requireNonNull(operator);
+        final Object[] es = getArray().clone();// 获取副本
+        for (; i < end; i++)
+            es[i] = operator.apply(elementAt(es, i));// 获取指定索引的元素并执行apply执行自定义lambda方法获取新值并更新
+        setArray(es);// 重新赋值
+    }
+
+    public void sort(Comparator<? super E> c) {
+        synchronized (lock) {
+            sortRange(c, 0, getArray().length);// 排序从0-length的元素
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    void sortRange(Comparator<? super E> c, int i, int end) {
+        // assert Thread.holdsLock(lock);
+        final Object[] es = getArray().clone();// 获取副本
+        Arrays.sort(es, i, end, (Comparator<Object>)c);// 根绝掺入的lambda进行排序
+        setArray(es);// 重新赋值
+    }
+
+}
+
+```
+
+
 
 ### 2.2 Set接口
 - 2.2.1 Set接口特性
