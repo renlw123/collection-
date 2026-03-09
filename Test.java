@@ -2062,6 +2062,23 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      * 将每个桶中的节点移动/复制到新的哈希表中。
      * 这是并发扩容的核心实现。
      *
+     * 第一个线程（线程A）开始扩容
+     * 线程A发现需要扩容，它创建新数组（长度为64）。
+     * 它从 transferIndex 变量中领取任务。
+     * transferIndex 是一个共享的原子变量，初始值是 n（32）。
+     * 线程A通过 CAS 操作将 transferIndex 从 32 减去步长 16，变成 16，成功领取到区间 (16, 31]。
+     * 它开始处理索引 31、30 ... 16，将这些桶里的链表或红黑树迁移到新数组（长度为64）的对应位置（i 和 i + n）。
+     * 每迁移完一个桶，就在旧数组的那个桶位置放一个 ForwardingNode。
+     *
+     * 第二个线程（线程B）前来帮助
+     * 线程B想要 put 一个元素，发现命中的桶上是一个 ForwardingNode（也就是你提到的 (fh = f.hash) == MOVED 这种情况）。
+     * 线程B不会干等着，而是调用 helpTransfer() 方法加入扩容。
+     * 它同样会去查看全局的 transferIndex 变量，此时 transferIndex 的值是 16。
+     * 线程B通过 CAS 操作将 transferIndex 从 16 减去步长 16，变成 0，成功领取到区间 (0, 15]。
+     * 它开始处理索引 15、14 ... 0，迁移这些低位桶。
+     * 每迁移完一个桶，同样放置 ForwardingNode
+     *
+     *
      * @param tab 旧的哈希表数组
      * @param nextTab 新的哈希表数组（如果为null，则需要创建）
      */
@@ -2124,13 +2141,13 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                 else if (U.compareAndSetInt
                         (this, TRANSFERINDEX, nextIndex,
                                 nextBound = (nextIndex > stride ?// 如果更新成功了，假如旧数组长度为32，那么transferIndex此时为32-步长等于16
-                                        nextIndex - stride : 0))) {// 说明领取了32-16这个范围的迁移任务
+                                        nextIndex - stride : 0))) {
                     /**
                      * 假设旧数组长度为32
                      *
                      * 此时更新transferIndex成功
                      * transferIndex = 16
-                     * nextIndex = 16
+                     * nextIndex = 32
                      * nextBound = 16
                      * bound = 16
                      * i = 32 - 1 = 31
